@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>我的网站 - 实时在线人数 (PubNub版)</title>
+    
+    <script src="https://cdn.pubnub.com/sdk/javascript/pubnub.7.4.0.min.js"></script>
+
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            background-color: #f4f6f8;
+            margin: 0;
+        }
+
+        .counter-card {
+            background: white;
+            padding: 40px 60px;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+            text-align: center;
+        }
+
+        .title {
+            color: #555;
+            font-size: 1.1rem;
+            margin-bottom: 15px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .count-box {
+            font-size: 5rem;
+            font-weight: 800;
+            color: #e02e22; /* PubNub 红 */
+            line-height: 1;
+        }
+
+        .status {
+            margin-top: 25px;
+            font-size: 0.9rem;
+            color: #999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        
+        .indicator {
+            width: 8px;
+            height: 8px;
+            background-color: #ccc;
+            border-radius: 50%;
+        }
+        
+        .online .indicator {
+            background-color: #2ecc71;
+            box-shadow: 0 0 8px rgba(46, 204, 113, 0.6);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="counter-card">
+        <div class="title">Live Visitors</div>
+        <div class="count-box" id="userCount">0</div>
+        <div class="status" id="connectionStatus">
+            <div class="indicator"></div>
+            <span id="statusText">Connecting to Global Network...</span>
+        </div>
+    </div>
+
+    <script>
+        // -------------------------------------------------------------
+        //  配置区域：请去 PubNub 官网获取免费 Key
+        // -------------------------------------------------------------
+        const PUBNUB_PUBLISH_KEY = 'pub-c-3f2772ea-2bf6-48b2-841c-cf4c567be826';
+        const PUBNUB_SUBSCRIBE_KEY = 'sub-c-e1f1a888-ca81-454b-8b88-4c7c8286d993';
+        const CHANNEL_NAME = 'my_github_site_v1';
+        // -------------------------------------------------------------
+
+        // 1. 初始化 PubNub
+        // 生成一个随机 ID 代表当前访客
+        const userId = 'user_' + Math.random().toString(36).substr(2, 9);
+        
+        const pubnub = new PubNub({
+            publishKey: PUBNUB_PUBLISH_KEY,
+            subscribeKey: PUBNUB_SUBSCRIBE_KEY,
+            userId: userId,
+            // 心跳检测间隔，保持在线状态
+            heartbeatInterval: 30 
+        });
+
+        const countEl = document.getElementById('userCount');
+        const statusDiv = document.getElementById('connectionStatus');
+        const statusText = document.getElementById('statusText');
+
+        // 2. 监听事件 (Presence = 在线状态变化)
+        pubnub.addListener({
+            status: function(statusEvent) {
+                if (statusEvent.category === "PNConnectedCategory") {
+                    statusDiv.classList.add('online');
+                    statusText.innerText = "System Online (Canada/Global)";
+                    
+                    // 连接成功后，立即查询当前已经在房间里的人数
+                    getInitialCount();
+                }
+            },
+            presence: function(presenceEvent) {
+                // 当有人加入(join)或离开(leave/timeout)时触发
+                // occupancy 表示当前房间总人数
+                updateCount(presenceEvent.occupancy);
+            }
+        });
+
+        // 3. 订阅频道
+        pubnub.subscribe({
+            channels: [CHANNEL_NAME],
+            withPresence: true // 重要：必须开启 Presence 才能统计人数
+        });
+
+        // 辅助函数：获取初始人数
+        function getInitialCount() {
+            pubnub.hereNow({
+                channels: [CHANNEL_NAME],
+                includeUUIDs: false,
+                includeState: false
+            }, function (status, response) {
+                if(!status.error && response.channels[CHANNEL_NAME]) {
+                    updateCount(response.channels[CHANNEL_NAME].occupancy);
+                } else {
+                    updateCount(1); // 失败了至少显示自己
+                }
+            });
+        }
+
+        // 辅助函数：更新界面
+        function updateCount(num) {
+            // 简单的防抖动，如果人数<1则强制为1（因为你自己就在线）
+            if (num < 1) num = 1; 
+            countEl.innerText = num;
+        }
+    </script>
+</body>
+</html>
