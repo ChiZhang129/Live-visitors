@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>我的网站 - 实时人数统计</title>
+    <script src="https://cdn.pubnub.com/sdk/javascript/pubnub.7.4.0.min.js"></script>
+
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            background-color: #f4f4f9;
+            margin: 0;
+            color: #333;
+        }
+
+        .counter-box {
+            background: white;
+            padding: 40px 60px;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+            text-align: center;
+        }
+
+        h2 {
+            margin: 0;
+            font-size: 1.2rem;
+            color: #666;
+            font-weight: 400;
+        }
+
+        #count {
+            display: block;
+            font-size: 6rem;
+            font-weight: 800;
+            color: #2c3e50;
+            line-height: 1.2;
+            margin: 10px 0;
+        }
+
+        .status {
+            font-size: 0.9rem;
+            color: #888;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        .dot {
+            width: 10px;
+            height: 10px;
+            background-color: #ddd;
+            border-radius: 50%;
+        }
+
+        /* 连接成功后的绿色状态 */
+        .active .dot {
+            background-color: #4cd137;
+            box-shadow: 0 0 8px #4cd137;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="counter-box">
+        <h2>正在浏览此页面的人数</h2>
+        <span id="count">...</span>
+        <div class="status" id="statusBox">
+            <span class="dot"></span>
+            <span id="statusText">连接中...</span>
+        </div>
+    </div>
+
+    <script>
+        // ============================================================
+        // 1. 配置区域
+        // ============================================================
+        const PUB_KEY = '你的_Publish_Key';   // 如果只有 Sub Key，这里留空或填 'demo'
+        const SUB_KEY = '你的_Subscribe_Key'; // 必填：sub-c-xxxx...
+        const CHANNEL = 'my_website_counter_v2';
+        // ============================================================
+
+        // ============================================================
+        // 2. 核心修复：检查浏览器缓存里有没有旧ID
+        // ============================================================
+        let userId = localStorage.getItem('site_user_uuid');
+
+        if (!userId) {
+            // 如果缓存里没有，说明是第一次来，生成一个随机ID
+            userId = 'user_' + Math.random().toString(36).substr(2, 9);
+            // 存入缓存，下次刷新时还能取出来
+            localStorage.setItem('site_user_uuid', userId);
+        }
+        
+        console.log("当前用户ID:", userId); // 你可以在控制台看到这个ID不变了
+
+        // ============================================================
+        // 3. 初始化 PubNub
+        // ============================================================
+        const pubnub = new PubNub({
+            publishKey: PUB_KEY,
+            subscribeKey: SUB_KEY,
+            userId: userId,
+            heartbeatInterval: 30 // 每30秒告诉服务器“我还活着”
+        });
+
+        const countEl = document.getElementById('count');
+        const statusBox = document.getElementById('statusBox');
+        const statusText = document.getElementById('statusText');
+
+        // 监听事件
+        pubnub.addListener({
+            status: function(st) {
+                if (st.category === "PNConnectedCategory") {
+                    statusBox.classList.add('active');
+                    statusText.innerText = "实时监控已连接";
+                    updateCount(); // 连上后立即查一次
+                }
+            },
+            presence: function(p) {
+                // 有人加入或离开时触发
+                countEl.innerText = p.occupancy;
+            }
+        });
+
+        // 订阅频道
+        pubnub.subscribe({
+            channels: [CHANNEL],
+            withPresence: true
+        });
+
+        // 主动获取当前人数
+        function updateCount() {
+            pubnub.hereNow({
+                channels: [CHANNEL],
+                includeState: false,
+                includeUUIDs: false
+            }, function(status, response) {
+                if (!status.error && response.channels[CHANNEL]) {
+                    countEl.innerText = response.channels[CHANNEL].occupancy;
+                } else {
+                    countEl.innerText = 1; // 兜底显示1
+                }
+            });
+        }
+
+        // ============================================================
+        // 4. 优化：关闭页面前，试着告诉服务器“我走了”
+        // ============================================================
+        window.addEventListener('beforeunload', function() {
+            pubnub.unsubscribeAll();
+        });
+
+    </script>
+</body>
+</html>
