@@ -107,7 +107,11 @@
             publishKey: PUB_KEY,
             subscribeKey: SUB_KEY,
             userId: userId,
-            heartbeatInterval: 10 // 每30秒告诉服务器“我还活着”
+// 告诉服务器：如果 40 秒没收到消息，就判定用户下线
+            presenceTimeout: 25, 
+            
+            // 告诉手机：每 10 秒发一次包（保持现状）
+            heartbeatInterval: 10 
         });
 
         const countEl = document.getElementById('count');
@@ -161,5 +165,6 @@
 </body>
 
 </html>
+
 
 
